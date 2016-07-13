@@ -3,10 +3,9 @@ package ca.uwaterloo.simplex;
 import java.util.ArrayList;
 import java.util.List;
 
+import ca.uwaterloo.shediac.KernelMgr.DeviceType;
 import ca.uwaterloo.simplex.solver.Solver;
 import ca.uwaterloo.simplex.solver.SolverProfiler;
-import ca.uwaterloo.simplex.solver.DeviceSolver;
-import ca.uwaterloo.shediac.KernelMgr.DeviceType;
 
 public final class Main {
 
@@ -24,7 +23,7 @@ public final class Main {
     // final SolverProfiler solver = new SolverProfiler(new
     // CpuSolver(numConstraints, numVars));
     final SolverProfiler solver =
-        new SolverProfiler(new DeviceSolver(numConstraints, numVars, DeviceType.CUDA, 0, 2, true));
+        new SolverProfiler(Solver.create(numConstraints, numVars, DeviceType.CUDA, 0, 2, true));
 
     // Add constraints
     solver.addConstraint(makeConstraint(1.0f, 1.0f));

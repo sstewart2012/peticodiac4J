@@ -23,7 +23,7 @@ public class CpuSolver extends AbstractSolver {
    * @param numVars
    * @param maxNumConstrs
    */
-  public CpuSolver(final int maxNumBasic, final int numNonbasic) {
+  CpuSolver(final int maxNumBasic, final int numNonbasic) {
     super(maxNumBasic, numNonbasic, BoundsType.CPU);
 
     // Initialize maps

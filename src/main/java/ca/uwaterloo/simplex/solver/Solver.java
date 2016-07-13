@@ -2,6 +2,9 @@ package ca.uwaterloo.simplex.solver;
 
 import java.util.List;
 
+import ca.uwaterloo.shediac.KernelMgr.DeviceType;
+
+
 /**
  * The public API for a Solver.
  * 
@@ -12,6 +15,23 @@ public interface Solver {
   final int NONE_FOUND = -1;
   final static float EPSILON = 0.000001f;
   final static int NO_BOUND = -1;
+
+  static AbstractSolver create(final int maxNumBasic, final int numNonbasic) {
+    return new CpuSolver(maxNumBasic, numNonbasic);
+  }
+  
+  static AbstractSolver create(final int maxNumBasic, final int numNonbasic, final DeviceType type, final int platformId, final int deviceId, final boolean enableExceptions) {
+    switch (type) {
+      case CUDA: {
+        return new DeviceSolver(maxNumBasic, numNonbasic, type, platformId, deviceId, enableExceptions);
+      }
+      case OpenCL: {
+        return new DeviceSolver(maxNumBasic, numNonbasic, type, platformId, deviceId, enableExceptions);
+      }
+      default:
+        throw new RuntimeException("Unsupported device type.");
+    }
+  }
 
   /**
    * Adds a linear constraint to the formula to be solved.

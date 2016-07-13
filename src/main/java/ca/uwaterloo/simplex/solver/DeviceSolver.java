@@ -5,11 +5,11 @@ import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import ca.uwaterloo.simplex.bounds.DeviceBounds;
 import ca.uwaterloo.shediac.KernelMgr;
 import ca.uwaterloo.shediac.KernelMgr.DeviceType;
 import ca.uwaterloo.shediac.memory.Buffer;
 import ca.uwaterloo.shediac.memory.Memory;
+import ca.uwaterloo.simplex.bounds.DeviceBounds;
 
 /**
  * A device-accelerated implementation of the AbstractSolver for general simplex. This
@@ -48,16 +48,6 @@ public class DeviceSolver extends AbstractSolver {
   private final int numVarsPerLaunch;
 
   /**
-   * When a broken variable is found, skipRow gets set to the row index of the tableau for the
-   * broken variable. Its value is used by updateAssignment to skip the updating of the tableau row
-   * that corresponds to the suitable variable, which gets swapped to this row index after pivoting.
-   * The suitable variable's assignment already gets updated by findSuitable, so work can be saved
-   * by skipping this row, and there may be less loss of precision due their being less floating
-   * point operations used in the calculation.
-   */
-  private int skipRowIdx = -1;
-
-  /**
    * DeviceSolver
    * 
    * @param maxNumBasic
@@ -67,7 +57,7 @@ public class DeviceSolver extends AbstractSolver {
    * @param deviceId
    * @param enableExceptions
    */
-  public DeviceSolver(final int maxNumBasic, final int numNonbasic, final DeviceType type,
+  DeviceSolver(final int maxNumBasic, final int numNonbasic, final DeviceType type,
       final int platformId, final int deviceId, final boolean enableExceptions) {
     super(maxNumBasic, numNonbasic, BoundsType.Device);
 
@@ -216,8 +206,6 @@ public class DeviceSolver extends AbstractSolver {
         break;
     }
     final int result = output[0] != numVars ? output[0] : -1;
-    if (result >= 0)
-      skipRowIdx = varToTableau[output[0]];
     Logger.getLogger("Solver").log(Level.FINE, "checkBounds: @ row " + (output[0] - numColumns)
         + ", " + var2str(output[0]) + " is broken");
     return result;
