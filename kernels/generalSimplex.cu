@@ -62,42 +62,43 @@ __global__ void find_suitable(
 	const float* const assigns,
 	const unsigned char* const flags,
 	const int* const varToTableau,
+	const int* const colToVar,
 	int* const suitable_idx
 ){
 	// Determine variable index assigned to this thread
 	const int idx = offset + (blockIdx.x * blockDim.x + threadIdx.x);
+	const int var = colToVar[idx];
 
 	// Boundary check and "basic" variables are skipped
-	if (idx >= ncols || flags[idx] == BASIC_FLAG)
+	if (idx >= ncols || flags[var] == BASIC_FLAG)
 		return;
 
-	// Read bounds information for the broken variable
-	const float ass = assigns[broken_idx];
-	const float low = lower[broken_idx];
-	const float upp = lower[broken_idx];
-
 	// Determine if the broken variable needs to be increased or decreased
-	const bool increase = ass < low;
+	const bool increase = assigns[broken_idx] < lower[broken_idx];
+
+	// Read bounds information needed to determine if potential suitable variable
+	// is increaseable or decreaseable
+	const float ass = assigns[var];
+	const float low = lower[var];
+	const float upp = upper[var];
 
 	// Obtain coefficient value in the tableau
-	const float coeff = tableau[varToTableau[broken_idx] * ncols + varToTableau[idx]];
+	const float coeff = tableau[varToTableau[broken_idx] * ncols + varToTableau[var]];
 
 	//printf("[%d] offset=%d ncols=%d low=%f ass=%f upp=%f increase=%d coeff=%f\n",
 	//	idx, offset, ncols, low, ass, upp, increase, coeff);
 	
 	if (increase){
-		if ((IS_INCREASABLE(low, upp, ass) && coeff > 0) || (IS_DECREASABLE(low, upp, ass) && coeff < 0)) {
-			//assigns[idx] += coeff < 0 ? -theta : theta;
-			//assigns[broken_idx] += delta;
-	        atomicMin(suitable_idx, idx);
+		if ((IS_INCREASABLE(low, upp, ass) && coeff > 0) 
+				|| (IS_DECREASABLE(low, upp, ass) && coeff < 0)) {
+	        atomicMin(suitable_idx, var);
 	        //printf("Variable %d is suitable\n", idx, suitable_idx);
 		}
 	}
 	else {
-		if ((IS_INCREASABLE(low, upp, ass) && coeff < 0) || (IS_DECREASABLE(low, upp, ass) && coeff > 0)) {
-			//assigns[idx] -= coeff < 0 ? theta : -theta;
-			//assigns[broken_idx] -= delta;
-	        atomicMin(suitable_idx, idx);
+		if ((IS_INCREASABLE(low, upp, ass) && coeff < 0) 
+				|| (IS_DECREASABLE(low, upp, ass) && coeff > 0)) {
+	        atomicMin(suitable_idx, var);
 	        //printf("Variable %d is suitable\n", idx, suitable_idx);
 		}
 	}
@@ -118,9 +119,9 @@ __global__ void find_suitable_complete(
 		return;
 
 	// Read bounds information for the broken variable
-	const float ass = assigns[broken_idx];
-	const float low = lower[broken_idx];
-	const float upp = lower[broken_idx];
+	float ass = assigns[broken_idx];
+	float low = lower[broken_idx];
+	float upp = upper[broken_idx];
 
 	// Determine if the broken variable needs to be increased or decreased
 	const bool increase = ass < low;
@@ -130,10 +131,17 @@ __global__ void find_suitable_complete(
 		+ varToTableau[suitable_idx]];
 
 	// Amounts to adjust assignments of suitable and broken variables
-	const float delta = increase ? low - ass : ass - upper[broken_idx];
+	const float delta = increase ? low - ass : ass - upp;
 	const float theta = delta / coeff;
 
-	//printf("[%d] brokenIdx=%d suitable_idx=%d coeff=%f delta=%f theta=%f increase=%d tableau[%d]=%f\n", idx, broken_idx, suitable_idx, coeff, delta, theta, increase, idx, tableau[idx]);
+	//printf("[%d] b=%d s=%d increase=%d delta=%f theta=%f\n",
+	//	threadIdx.x, broken_idx, suitable_idx, increase, delta, theta);
+
+	// Read bounds info for the suitable variable to check if
+	// increaseable or decreaseable
+	ass = assigns[suitable_idx];
+	low = lower[suitable_idx];
+	upp = upper[suitable_idx];
 
 	if (increase) {
 		if ((IS_INCREASABLE(low, upp, ass) && coeff > 0) ||
@@ -283,6 +291,6 @@ __global__ void update_assignment_complete(
 	// Write the result to the assignments array
 	if (lid == 0) {
 		assigns[var] = partial_sums[0];
-		printf("[%d] a(%d)=%f\n", lid, var, assigns[var]);
+		//printf("[%d] a(%d)=%f\n", lid, var, assigns[var]);
 	}
 }

@@ -91,4 +91,15 @@ public interface Bounds {
   /** Sets the flag property of variable <code>i</code>. */
   void setFlag(int i, byte val);
 
+  /** Returns a String representation of the bounds on the specified variable. */
+  default String toString(final int idx) {
+    final StringBuilder sb = new StringBuilder();
+    sb.append(idx + ": ");
+    sb.append(getLowerBound(idx) + " <= ");
+    sb.append(getAssignment(idx) + " <= ");
+    sb.append(getUpperBound(idx));
+    //if (isBroken(idx))
+    //  sb.append(" broken");
+    return sb.toString();
+  }
 }

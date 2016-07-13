@@ -171,7 +171,7 @@ public abstract class AbstractSolver implements Solver {
         System.out.print("[x" + varIdx + "=" + a + "] ");
       for (int j = 0; j < numColumns; j++) {
         System.out.print(getTableauEntry(i, j));
-        if (j + 1 < numRows)
+        if (j + 1 < numColumns)
           System.out.print(" ");
       }
       System.out.println();
@@ -182,4 +182,8 @@ public abstract class AbstractSolver implements Solver {
 
   protected abstract void preSolve();
 
+  public void printBounds() {
+    for (int i = 0; i < numVars; i++)
+      System.out.println(bounds.toString(i));
+  }
 }

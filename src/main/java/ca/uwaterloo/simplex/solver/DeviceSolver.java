@@ -96,6 +96,10 @@ public class DeviceSolver extends AbstractSolver {
     devBounds.memLower = mgr.allocateDevice(groupId, size);
     devBounds.memUpper = mgr.allocateDevice(groupId, size);
     devBounds.memFlags = mgr.allocateDeviceFromHost(groupId, flags);
+    
+    // Set default upper bounds
+    for (int i = 0; i < numVars; i++)
+      bounds.setUpperBound(i, NO_BOUND);
 
     // Initialize assignments on device to 0
     for (int i = 0; i < numVars; i++)
@@ -123,7 +127,7 @@ public class DeviceSolver extends AbstractSolver {
     {
       final Integer[] scalars = new Integer[] {numColumns, 0, 0};
       final Memory[] buffers = new Memory[] {memTableau, devBounds.memLower, devBounds.memUpper,
-          devBounds.memAssigns, devBounds.memFlags, memVarToTableau, memOutput};
+          devBounds.memAssigns, devBounds.memFlags, memVarToTableau, memColToVar, memOutput};
       addArgs(kernels.get("find_suitable"), scalars, buffers);
     }
     // Add arguments for findSuitableComplete kernel
@@ -236,6 +240,7 @@ public class DeviceSolver extends AbstractSolver {
       mgr.setArgumentScalar(groupId, kernelId, 2, suitableIdx);
       mgr.runKernel(groupId, kernelId, new long[] {1, 1, 1}, new long[] {1, 1, 1});
     }
+    //printBounds();
     Logger.getLogger("Solver").log(Level.FINE, "findSuitable: " + var2str(suitableIdx));
     return suitableIdx;
   }
