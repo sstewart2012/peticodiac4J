@@ -226,7 +226,7 @@ __global__ void pivot_update_column(
 }
 
 extern "C"
-__global__ void update_assignment(
+__global__ void update_assignment_1(
 	const int n,
 	const float* const input,
 	const float* const assigns,
@@ -236,12 +236,10 @@ __global__ void update_assignment(
 	extern __shared__ float partial_sums[];
 	const int gid = blockDim.x * blockIdx.x + threadIdx.x;
 	const int lid = threadIdx.x;
-	
+
 	// Boundary check
 	if (gid >= n)
 		return;
-
-	//printf("[%d] n=%d\n", gid, n); return;
 
 	// Pre-fetch and multiply by corresponding assignment
 	const float a = assigns[colToVar[gid]];
@@ -253,7 +251,7 @@ __global__ void update_assignment(
 
 	// Reduce using interleaved pairs
 	for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-		if (lid < stride) {
+		if (lid < stride && lid + stride < n) {
 			partial_sums[lid] += partial_sums[lid + stride];
 		}
 		__syncthreads();
@@ -266,23 +264,53 @@ __global__ void update_assignment(
 }
 
 extern "C"
+__global__ void update_assignment_2(
+	const int n,
+	float* const data
+){
+	extern __shared__ float partial_sums[];
+	const int gid = blockDim.x * blockIdx.x + threadIdx.x;
+	const int lid = threadIdx.x;
+
+	// Boundary check
+	if (gid >= n)
+		return;
+
+	// Pre-fetch
+	partial_sums[lid] = data[gid];
+	__syncthreads();
+
+	// Reduce using interleaved pairs
+	for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+		if (lid < stride && lid + stride < n) {
+			partial_sums[lid] += partial_sums[lid + stride];
+		}
+		__syncthreads();
+	}
+
+	// Write the result for this block to global memory
+	if (lid == 0) {
+		data[blockIdx.x] = partial_sums[0];
+	}
+}
+
+extern "C"
 __global__ void update_assignment_complete(
-	const int var,
-	const float* const input,
-	float* const assigns
+	const int n,
+	float* const data
 ){
 	extern __shared__ float partial_sums[];
 	const int lid = threadIdx.x;
 	//printf("[%d] var=%d input=%f\n", lid, var, input[idx], input);
 
 	// Pre-fetch
-	partial_sums[lid] = input[lid];
+	partial_sums[lid] = data[lid];
 	__syncthreads();
 	//printf("[%d] offset=%d var=%d partial_sums=%f\n", lid, offset, var, partial_sums[idx]);
 
 	// Reduce
 	for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-		if (lid < stride) {
+		if (lid < stride  && lid + stride < n) {
 			partial_sums[lid] += partial_sums[lid + stride];
 		}
 		__syncthreads();
@@ -290,7 +318,6 @@ __global__ void update_assignment_complete(
 
 	// Write the result to the assignments array
 	if (lid == 0) {
-		assigns[var] = partial_sums[0];
-		//printf("[%d] a(%d)=%f\n", lid, var, assigns[var]);
+		data[0] = partial_sums[0];
 	}
 }

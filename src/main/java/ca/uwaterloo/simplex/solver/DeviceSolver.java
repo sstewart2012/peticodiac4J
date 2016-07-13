@@ -39,7 +39,7 @@ public class DeviceSolver extends AbstractSolver {
 
   private final String[] kernelNames = new String[] {"check_bounds", "find_suitable",
       "find_suitable_complete", "pivot_update_inner", "pivot_update_row", "pivot_update_column",
-      "update_assignment", "update_assignment_complete"};
+      "update_assignment_1", "update_assignment_2", "update_assignment_complete"};
 
   private final HashMap<String, Integer> kernels = new HashMap<>();
 
@@ -75,7 +75,7 @@ public class DeviceSolver extends AbstractSolver {
     groupId = mgr.createKernelGroup(type, platformId, deviceId, enableExceptions);
 
     // Configuration
-    workgroupSize = (int) mgr.getDevice(groupId).maxWorkGroupSize();
+    workgroupSize = 2;// (int) mgr.getDevice(groupId).maxWorkGroupSize();
     numVarsPerLaunch = mgr.getDevice(groupId).computeUnits() * workgroupSize;
     numLaunches = (numVars + workgroupSize - 1) / workgroupSize;
 
@@ -96,7 +96,7 @@ public class DeviceSolver extends AbstractSolver {
     devBounds.memLower = mgr.allocateDevice(groupId, size);
     devBounds.memUpper = mgr.allocateDevice(groupId, size);
     devBounds.memFlags = mgr.allocateDeviceFromHost(groupId, flags);
-    
+
     // Set default upper bounds
     for (int i = 0; i < numVars; i++)
       bounds.setUpperBound(i, NO_BOUND);
@@ -160,11 +160,16 @@ public class DeviceSolver extends AbstractSolver {
       final Integer[] scalars = new Integer[] {numColumns};
       final Memory[] buffers =
           new Memory[] {memTableau, devBounds.memAssigns, memColToVar, memPartialSums};
-      addArgs(kernels.get("update_assignment"), scalars, buffers);
+      addArgs(kernels.get("update_assignment_1"), scalars, buffers);
     }
     {
-      final Integer[] scalars = {0, 0};
-      final Memory[] buffers = new Memory[] {memTableau, devBounds.memAssigns};
+      final Integer[] scalars = new Integer[] {0};
+      final Memory[] buffers = new Memory[] {memPartialSums};
+      addArgs(kernels.get("update_assignment_2"), scalars, buffers);
+    }
+    {
+      final Integer[] scalars = {0};
+      final Memory[] buffers = new Memory[] {memPartialSums};
       addArgs(kernels.get("update_assignment_complete"), scalars, buffers);
     }
 
@@ -240,7 +245,7 @@ public class DeviceSolver extends AbstractSolver {
       mgr.setArgumentScalar(groupId, kernelId, 2, suitableIdx);
       mgr.runKernel(groupId, kernelId, new long[] {1, 1, 1}, new long[] {1, 1, 1});
     }
-    //printBounds();
+    // printBounds();
     Logger.getLogger("Solver").log(Level.FINE, "findSuitable: " + var2str(suitableIdx));
     return suitableIdx;
   }
@@ -309,9 +314,6 @@ public class DeviceSolver extends AbstractSolver {
 
   @Override
   protected void updateAssignment() {
-    // TODO fix: currently, only produces correct results if the number of
-    // columns is a power of 2
-    assert numColumns >= 0 && (numColumns & (numColumns - 1)) == 0;
     for (int i = 0; i < numRows; i++) {
       final Buffer row = memTableau.getDeviceBuffer().withByteOffset(i * numColumns * Float.BYTES);
       updateAssignmentRow(i, row);
@@ -319,52 +321,69 @@ public class DeviceSolver extends AbstractSolver {
   }
 
   private void updateAssignmentRow(final int rowIdx, final Buffer row) {
-    final int kernelId = kernels.get("update_assignment");
+    float a = 0.0f;
+    if (workgroupSize == 1) {
+      for (int i = 0; i < numColumns; i++)
+        a += memPartialSums.asFloatMemory().get(i);      
+    } else {
+      int numItems = updateAssignment1(row, numColumns);
+      if (numItems > 1) {
+        while (numItems > workgroupSize) {
+          numItems = updateAssignment2(numItems);
+        }
+        updateAssignmentComplete(numItems);
+      }
+      a = memPartialSums.asFloatMemory().get(0);
+    }
+    
+    // Write the computed assignment to device memory
+    devBounds.setAssignment(rowToVar[rowIdx], a);
+
+    Logger.getLogger("Solver").log(Level.FINE,
+        "updateAssignment (" + var2str(rowToVar[rowIdx]) + "): " + a);
+  }
+
+  /**
+   * Each element in the <code>row</code> is multipled by the respective assignment of the column
+   * variable, and each workgroup performs a local sum reduction. The partial sum from each
+   * workgroup is stored in the output buffer (See {@link #memOutput}).
+   * 
+   * @param numItems the number of items to be reduced
+   * @return the number of items in the output to be reduced
+   */
+  private int updateAssignment1(final Buffer row, final int numItems) {
+    final int kernelId = kernels.get("update_assignment_1");
     final long global[] = new long[] {numColumns, 1, 1};
     final long local[] = new long[] {workgroupSize, 1, 1};
-    final int numGroups = (numColumns + workgroupSize - 1) / workgroupSize;
-
-    // Runs the update_assignment kernel. Each workgroup performs a
-    // reduction on its share of the
-    // columns, multiplying each element by the current assignment of the
-    // variable of the respective
-    // column. The result from each workgroup is stored in memOutput.
+    mgr.setArgumentScalar(groupId, kernelId, 0, numItems);
     mgr.setArgument(groupId, kernelId, 1, row);
     mgr.runKernel(groupId, kernelId, global, local);
-
-    if (numGroups == 1) {
-      // If only one workgroup was needed in the first step, then the new
-      // assignment is in memOutput[0] and needs to be written to
-      // memAssigns[var]
-      final float a = memPartialSums.asFloatMemory().get(0);
-      devBounds.memAssigns.asFloatMemory().set(rowToVar[rowIdx], a);
-      Logger.getLogger("Solver").log(Level.FINE,
-          "updateAssignment (" + var2str(rowToVar[rowIdx]) + "): " + a);
-      return;
-    }
-
-    // Otherwise, we reduce the output of the first reduction step. This
-    // second kernel simply
-    // reduces the partial sums produced by the first kernel, without having
-    // to multiply any
-    // values by an assignment.
-
+    return DeviceSolver.numWorkgroups(numItems, workgroupSize);
   }
 
-  private String var2str(final int varIdx) {
-    if (varIdx >= numColumns)
-      return "s" + (varIdx - numColumns);
-    else
-      return "x" + varIdx;
+  /**
+   * Repeatedly applies the parallel reduction step.
+   */
+  private int updateAssignment2(final int numItems) {
+    assert numItems > workgroupSize;
+    final int kernelId = kernels.get("update_assignment_2");
+    final long global[] = new long[] {numItems, 1, 1};
+    final long local[] = new long[] {workgroupSize, 1, 1};
+    mgr.setArgumentScalar(groupId, kernelId, 0, numItems);
+    mgr.runKernel(groupId, kernelId, global, local);
+    return DeviceSolver.numWorkgroups(numItems, workgroupSize);
   }
 
-  private void updateAssignmentComplete(final int offset, final int rowIdx, final int numItems,
-      final Buffer input) {
+  /**
+   * Launches one workgroup to complete the reduction.
+   */
+  private void updateAssignmentComplete(final int numItems) {
+    assert numItems <= workgroupSize;
     final int kernelId = kernels.get("update_assignment_complete");
-    mgr.setArgumentScalar(groupId, kernelId, 0, offset);
-    mgr.setArgumentScalar(groupId, kernelId, 1, rowToVar[rowIdx]);
-    mgr.setArgument(groupId, kernelId, 2, input);
-    mgr.runKernel(groupId, kernelId, new long[] {numItems, 1, 1}, new long[] {numItems, 1, 1});
+    final long global[] = new long[] {numItems, 1, 1};
+    final long local[] = new long[] {numItems, 1, 1};
+    mgr.setArgumentScalar(groupId, kernelId, 0, numItems);
+    mgr.runKernel(groupId, kernelId, global, local);
   }
 
   @Override
@@ -376,6 +395,17 @@ public class DeviceSolver extends AbstractSolver {
   @Override
   protected float getTableauEntry(int row, int col) {
     return memTableau.asFloatMemory().get(row * numColumns + col);
+  }
+
+  private String var2str(final int varIdx) {
+    if (varIdx >= numColumns)
+      return "s" + (varIdx - numColumns);
+    else
+      return "x" + varIdx;
+  }
+
+  private static int numWorkgroups(final int numItems, final int workgroupSize) {
+    return (numItems + workgroupSize - 1) / workgroupSize;
   }
 
 }

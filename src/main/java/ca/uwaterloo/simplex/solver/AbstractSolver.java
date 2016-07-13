@@ -66,7 +66,6 @@ public abstract class AbstractSolver implements Solver {
   public boolean solve() {
     int brokenIdx = 0;
     int suitableIdx = 0;
-
     while ((brokenIdx = checkBounds()) >= 0) {
       if ((suitableIdx = findSuitable(brokenIdx)) < 0)
         return false;
