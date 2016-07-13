@@ -21,7 +21,8 @@ public final class Main {
     final int numVars = 2;
     final int numConstraints = 3;
     // final CpuSolver solver = new CpuSolver(numConstraints, numVars);
-    // final SolverProfiler solver = new SolverProfiler(new CpuSolver(numConstraints, numVars));
+    // final SolverProfiler solver = new SolverProfiler(new
+    // CpuSolver(numConstraints, numVars));
     final SolverProfiler solver =
         new SolverProfiler(new DeviceSolver(numConstraints, numVars, DeviceType.CUDA, 0, 2, true));
 
@@ -45,12 +46,15 @@ public final class Main {
 
     // Print solution (if applicable)
     if (result) {
+      System.out.println();
+      System.out.println("Solution:");
       final List<Float> solution = solver.solution();
       int i = 0;
       for (final Float x : solution) {
-        System.out.println("x" + i + "=" + x);
+        System.out.printf("  x%d=%.2f\n", i, x);
         i++;
       }
+      System.out.println();
     }
 
     // Print summary

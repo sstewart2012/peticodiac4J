@@ -12,7 +12,7 @@ public interface Solver {
   final int NONE_FOUND = -1;
   final static float EPSILON = 0.000001f;
   final static int NO_BOUND = -1;
-  
+
   /**
    * Adds a linear constraint to the formula to be solved.
    * 

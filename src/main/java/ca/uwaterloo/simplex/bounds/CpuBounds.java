@@ -55,7 +55,7 @@ public class CpuBounds implements Bounds {
   public byte[] getFlags() {
     return flags;
   }
-  
+
   @Override
   public void setFlag(final int i, final byte val) {
     flags[i] = val;

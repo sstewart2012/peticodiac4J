@@ -15,7 +15,7 @@ public abstract class AbstractSolver implements Solver {
   }
 
   protected final static Logger logger = Logger.getLogger("Solver");
-  
+
   protected final Bounds bounds;
   protected int numRows = 0;
   protected final int maxNumRows;
@@ -154,11 +154,21 @@ public abstract class AbstractSolver implements Solver {
   public void printTableau() {
     System.out.print("     ");
     for (int j = 0; j < numColumns; j++) {
-      System.out.print("[x" + colToVar[j] + "] ");
+      final int varIdx = colToVar[j];
+      final float a = bounds.getAssignment(varIdx);
+      if (varIdx >= numColumns)
+        System.out.print("[s" + (varIdx - numColumns) + "=" + a + "] ");
+      else
+        System.out.print("[x" + varIdx + "=" + a + "] ");
     }
     System.out.println();
     for (int i = 0; i < numRows; i++) {
-      System.out.print("[s" + rowToVar[i] + "] ");
+      final int varIdx = rowToVar[i];
+      final float a = bounds.getAssignment(varIdx);
+      if (varIdx >= numColumns)
+        System.out.print("[s" + (varIdx - numColumns) + "=" + a + "] ");
+      else
+        System.out.print("[x" + varIdx + "=" + a + "] ");
       for (int j = 0; j < numColumns; j++) {
         System.out.print(getTableauEntry(i, j));
         if (j + 1 < numRows)
@@ -167,9 +177,9 @@ public abstract class AbstractSolver implements Solver {
       System.out.println();
     }
   }
-  
+
   protected abstract float getTableauEntry(int row, int col);
-  
+
   protected abstract void preSolve();
 
 }

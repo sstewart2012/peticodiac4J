@@ -48,6 +48,16 @@ public class DeviceSolver extends AbstractSolver {
   private final int numVarsPerLaunch;
 
   /**
+   * When a broken variable is found, skipRow gets set to the row index of the tableau for the
+   * broken variable. Its value is used by updateAssignment to skip the updating of the tableau row
+   * that corresponds to the suitable variable, which gets swapped to this row index after pivoting.
+   * The suitable variable's assignment already gets updated by findSuitable, so work can be saved
+   * by skipping this row, and there may be less loss of precision due their being less floating
+   * point operations used in the calculation.
+   */
+  private int skipRowIdx = -1;
+
+  /**
    * DeviceSolver
    * 
    * @param maxNumBasic
@@ -121,14 +131,14 @@ public class DeviceSolver extends AbstractSolver {
     }
     // Add arguments for findSuitable kernel
     {
-      final Integer[] scalars = new Integer[] {numVars, 0, 0};
+      final Integer[] scalars = new Integer[] {numColumns, 0, 0};
       final Memory[] buffers = new Memory[] {memTableau, devBounds.memLower, devBounds.memUpper,
           devBounds.memAssigns, devBounds.memFlags, memVarToTableau, memOutput};
       addArgs(kernels.get("find_suitable"), scalars, buffers);
     }
     // Add arguments for findSuitableComplete kernel
     {
-      final Integer[] scalars = new Integer[] {numVars, 0, 0};
+      final Integer[] scalars = new Integer[] {numColumns, 0, 0};
       final Memory[] buffers = new Memory[] {memTableau, devBounds.memLower, devBounds.memUpper,
           devBounds.memAssigns, memVarToTableau};
       addArgs(kernels.get("find_suitable_complete"), scalars, buffers);
@@ -206,7 +216,10 @@ public class DeviceSolver extends AbstractSolver {
         break;
     }
     final int result = output[0] != numVars ? output[0] : -1;
-    Logger.getLogger("Solver").log(Level.INFO, "checkBounds: " + result);
+    if (result >= 0)
+      skipRowIdx = varToTableau[output[0]];
+    Logger.getLogger("Solver").log(Level.FINE, "checkBounds: @ row " + (output[0] - numColumns)
+        + ", " + var2str(output[0]) + " is broken");
     return result;
   }
 
@@ -226,7 +239,7 @@ public class DeviceSolver extends AbstractSolver {
       if (output[0] != numVars)
         break;
     }
-    final int suitableIdx = output[0] != numVars ? output[0] : -1;
+    final int suitableIdx = output[0] != numVars ? colToVar[output[0]] : -1;
 
     if (suitableIdx >= 0) {
       // Run second kernel to complete the operation
@@ -235,14 +248,14 @@ public class DeviceSolver extends AbstractSolver {
       mgr.setArgumentScalar(groupId, kernelId, 2, suitableIdx);
       mgr.runKernel(groupId, kernelId, new long[] {1, 1, 1}, new long[] {1, 1, 1});
     }
-    Logger.getLogger("Solver").log(Level.INFO, "findSuitable: " + suitableIdx);
+    Logger.getLogger("Solver").log(Level.FINE, "findSuitable: " + var2str(suitableIdx));
     return suitableIdx;
   }
 
   @Override
   protected void pivot(int basicIdx, int nonbasicIdx) {
-    Logger.getLogger("Solver").log(Level.INFO,
-        "pivot: brokenIdx=" + basicIdx + " suitableIdx=" + nonbasicIdx);
+    Logger.getLogger("Solver").log(Level.FINE,
+        "pivot: brokenIdx=" + var2str(basicIdx) + " suitableIdx=" + var2str(nonbasicIdx));
     final int pivotRow = varToTableau[basicIdx];
     final int pivotCol = varToTableau[nonbasicIdx];
     final int alphaIdx = pivotRow * numColumns + pivotCol;
@@ -259,8 +272,8 @@ public class DeviceSolver extends AbstractSolver {
     memTableau.asFloatMemory().set(alphaIdx, 1 / alpha);
 
     // Swap the basic and nonbasic variables
-    colToVar[pivotRow] = basicIdx;
-    rowToVar[pivotCol] = nonbasicIdx;
+    colToVar[pivotCol] = basicIdx;
+    rowToVar[pivotRow] = nonbasicIdx;
     varToTableau[basicIdx] = pivotCol;
     varToTableau[nonbasicIdx] = pivotRow;
 
@@ -303,7 +316,8 @@ public class DeviceSolver extends AbstractSolver {
 
   @Override
   protected void updateAssignment() {
-    // TODO fix: currently, only produces correct results if the number of columns is a power of 2
+    // TODO fix: currently, only produces correct results if the number of
+    // columns is a power of 2
     assert numColumns >= 0 && (numColumns & (numColumns - 1)) == 0;
     for (int i = 0; i < numRows; i++) {
       final Buffer row = memTableau.getDeviceBuffer().withByteOffset(i * numColumns * Float.BYTES);
@@ -317,27 +331,41 @@ public class DeviceSolver extends AbstractSolver {
     final long local[] = new long[] {workgroupSize, 1, 1};
     final int numGroups = (numColumns + workgroupSize - 1) / workgroupSize;
 
-    // Runs the update_assignment kernel. Each workgroup performs a reduction on its share of the
-    // columns, multiplying each element by the current assignment of the variable of the respective
+    // Runs the update_assignment kernel. Each workgroup performs a
+    // reduction on its share of the
+    // columns, multiplying each element by the current assignment of the
+    // variable of the respective
     // column. The result from each workgroup is stored in memOutput.
     mgr.setArgument(groupId, kernelId, 1, row);
     mgr.runKernel(groupId, kernelId, global, local);
 
     if (numGroups == 1) {
-      // If only one workgroup was needed in the first step, then the new assignment is in
-      // memOutput[0] and needs to be written to memAssigns[var]
+      // If only one workgroup was needed in the first step, then the new
+      // assignment is in memOutput[0] and needs to be written to
+      // memAssigns[var]
       final float a = memPartialSums.asFloatMemory().get(0);
       devBounds.memAssigns.asFloatMemory().set(rowToVar[rowIdx], a);
+      Logger.getLogger("Solver").log(Level.FINE,
+          "updateAssignment (" + var2str(rowToVar[rowIdx]) + "): " + a);
       return;
     }
 
-    // Otherwise, we reduce the output of the first reduction step. This second kernel simply
-    // reduces the partial sums produced by the first kernel, without having to multiply any
+    // Otherwise, we reduce the output of the first reduction step. This
+    // second kernel simply
+    // reduces the partial sums produced by the first kernel, without having
+    // to multiply any
     // values by an assignment.
 
   }
 
-  private void UpdateAssignmentComplete(final int offset, final int rowIdx, final int numItems,
+  private String var2str(final int varIdx) {
+    if (varIdx >= numColumns)
+      return "s" + (varIdx - numColumns);
+    else
+      return "x" + varIdx;
+  }
+
+  private void updateAssignmentComplete(final int offset, final int rowIdx, final int numItems,
       final Buffer input) {
     final int kernelId = kernels.get("update_assignment_complete");
     mgr.setArgumentScalar(groupId, kernelId, 0, offset);

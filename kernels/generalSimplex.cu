@@ -53,7 +53,7 @@ __global__ void check_bounds(
  */
  extern "C"
 __global__ void find_suitable(
-	const int nvars,
+	const int ncols,
 	const int broken_idx,
 	const int offset,
 	const float* const tableau,
@@ -68,7 +68,7 @@ __global__ void find_suitable(
 	const int idx = offset + (blockIdx.x * blockDim.x + threadIdx.x);
 
 	// Boundary check and "basic" variables are skipped
-	if (idx >= nvars || flags[idx] == BASIC_FLAG)
+	if (idx >= ncols || flags[idx] == BASIC_FLAG)
 		return;
 
 	// Read bounds information for the broken variable
@@ -80,8 +80,11 @@ __global__ void find_suitable(
 	const bool increase = ass < low;
 
 	// Obtain coefficient value in the tableau
-	const float coeff = tableau[varToTableau[broken_idx] * nvars + varToTableau[idx]];
+	const float coeff = tableau[varToTableau[broken_idx] * ncols + varToTableau[idx]];
 
+	//printf("[%d] offset=%d ncols=%d low=%f ass=%f upp=%f increase=%d coeff=%f\n",
+	//	idx, offset, ncols, low, ass, upp, increase, coeff);
+	
 	if (increase){
 		if ((IS_INCREASABLE(low, upp, ass) && coeff > 0) || (IS_DECREASABLE(low, upp, ass) && coeff < 0)) {
 			//assigns[idx] += coeff < 0 ? -theta : theta;
@@ -102,7 +105,7 @@ __global__ void find_suitable(
 
 extern "C"
 __global__ void find_suitable_complete(
-	const int nvars,
+	const int ncols,
 	const int broken_idx,
 	const int suitable_idx,
 	const float* const tableau,
@@ -111,9 +114,7 @@ __global__ void find_suitable_complete(
 	float* const assigns,
 	const int* const varToTableau
 ){
-	const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if (idx > 0)
+	if (blockIdx.x * blockDim.x + threadIdx.x > 0)
 		return;
 
 	// Read bounds information for the broken variable
@@ -125,7 +126,8 @@ __global__ void find_suitable_complete(
 	const bool increase = ass < low;
 
 	// Obtain coefficient value in the tableau
-	const float coeff = tableau[varToTableau[broken_idx] * nvars + varToTableau[idx]];
+	const float coeff = tableau[varToTableau[broken_idx] * ncols
+		+ varToTableau[suitable_idx]];
 
 	// Amounts to adjust assignments of suitable and broken variables
 	const float delta = increase ? low - ass : ass - upper[broken_idx];

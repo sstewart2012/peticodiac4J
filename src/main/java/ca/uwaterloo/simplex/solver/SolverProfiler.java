@@ -59,13 +59,13 @@ public final class SolverProfiler implements Solver {
    */
   private boolean solveProcedure() {
     solver.preSolve();
+    printTableau();
     int brokenIdx = 0;
     int suitableIdx = 0;
     while ((brokenIdx = checkBounds()) >= 0) {
       if ((suitableIdx = findSuitable(brokenIdx)) < 0)
         return false;
       pivot(brokenIdx, suitableIdx);
-      printTableau();
       updateAssignment();
     }
     return true;

@@ -51,9 +51,8 @@ public class CpuSolver extends AbstractSolver {
   @Override
   protected int findSuitable(final int brokenIdx) {
     final boolean increase = bounds.getAssignment(brokenIdx) < bounds.getLowerBound(brokenIdx);
-    final float delta =
-        increase ? bounds.getLowerBound(brokenIdx) - bounds.getAssignment(brokenIdx) : bounds
-            .getAssignment(brokenIdx) - bounds.getUpperBound(brokenIdx);
+    final float delta = increase ? bounds.getLowerBound(brokenIdx) - bounds.getAssignment(brokenIdx)
+        : bounds.getAssignment(brokenIdx) - bounds.getUpperBound(brokenIdx);
     if (increase)
       return findSuitableIncrease(brokenIdx, delta);
     else

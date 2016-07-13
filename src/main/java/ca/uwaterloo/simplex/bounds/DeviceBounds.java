@@ -7,7 +7,7 @@ public class DeviceBounds implements Bounds {
   private final int numBasic;
   private final int numNonbasic;
   private final int numVars;
-  //private final float epsilon;
+  // private final float epsilon;
 
   public Memory memLower;
   public Memory memUpper;
@@ -17,7 +17,7 @@ public class DeviceBounds implements Bounds {
   public DeviceBounds(final int numBasic, final int numNonbasic, final float epsilon) {
     this.numBasic = numBasic;
     this.numNonbasic = numNonbasic;
-    //this.epsilon = epsilon;
+    // this.epsilon = epsilon;
     numVars = numBasic + numNonbasic;
   }
 
@@ -135,7 +135,7 @@ public class DeviceBounds implements Bounds {
 
   @Override
   public void setFlag(int i, byte val) {
-    memFlags.asByteMemory().set(i, val);    
+    memFlags.asByteMemory().set(i, val);
   }
 
 
