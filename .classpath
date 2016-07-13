@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src/main/java">
+		<attributes>
+			<attribute name="org.eclipse.jdt.launching.CLASSPATH_ATTR_LIBRARY_PATH_ENTRY" value="peticodiac4J/lib/jcuda"/>
+		</attributes>
+	</classpathentry>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="lib" path="lib/shediac.jar" sourcepath="/shediac/src/main/java"/>
+	<classpathentry kind="lib" path="lib/jcuda/jcuda-0.7.5.jar"/>
+	<classpathentry kind="lib" path="lib/jocl/JOCL-0.1.9.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
