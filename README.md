@@ -1,5 +1,5 @@
 # peticodiac4J
-In this project, called Peticodiac4J, we use many-core devices (such as GPUs) to accelerate the primitive operations of the procedure. The host program runs on the Java-CPU side, and the device kernels are implemented in either OpenCL or CUDA.
+In this project, called Peticodiac4J, we use many-core devices (such as GPUs) to accelerate the primitive operations of the general simplex procedure. The host program runs on the Java-CPU side, and the device kernels are implemented in either OpenCL or CUDA.
 
 ## Primitive Operations
 The primitive operations of the general simplex procedure include:
